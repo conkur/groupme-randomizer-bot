@@ -8,6 +8,7 @@
   "private": true,
   "scripts": {
     "build": "tsc",
+    "postinstall": "yarn build",
     "start": "node dist/index.js",
     "watch-node": "nodemon dist/index.js",
     "watch-ts": "tsc -w"
