@@ -1,0 +1,29 @@
+{
+  "name": "groupme-robot-slave",
+  "version": "1.0.0",
+  "description": "Groupme bot",
+  "main": "dist/index.js",
+  "author": "Kevin",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "postinstall": "yarn build",
+    "start": "node dist/index.js",
+    "watch-node": "nodemon dist/index.js",
+    "watch-ts": "tsc -w"
+  },
+  "engines": {
+    "node": "^8.11.0"
+  },
+  "dependencies": {
+    "express": "^4.16.4",
+    "request": "^2.88.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.16.1",
+    "@types/request": "^2.48.1",
+    "nodemon": "^1.18.10",
+    "typescript": "^3.4.1"
+  }
+}
