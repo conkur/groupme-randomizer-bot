@@ -13,15 +13,12 @@ export class RobotSlave {
 
         // We don't want to do anything if the bot itself sent the message.
         if (groupMeBody.name === process.env.BOT_NAME) {
-            console.log(`${name} === ${process.env.BOT_NAME}`);
             return;
         }
 
         // TODO: Make this check more strict. If someone's username begins with '@all' then that will cause a problem.
         if (groupMeBody.text.includes('@all')) {
             RobotSlave.mentionEveryone(groupMeBody.text);
-        } else {
-            console.log(`${groupMeBody.text} does not contain '@all'`);
         }
     };
 
@@ -46,8 +43,6 @@ export class RobotSlave {
                 type: "mentions",
                 user_ids: [] as string[],
             }];
-
-            console.log(`members = ${res.body.response.members}`);
         
             // Create the list of user IDs. Each user in this list will be pinged.
             // TODO: Does GroupMe handle not pinging those who have muted the group, or do we need to make that check ourselves?

@@ -12,7 +12,6 @@ app.get('/', (_req: Express.Request, res: Express.Response) => {
 
 // GroupMe sends a post request if a chat was sent to the group.
 app.post('/', (req: Express.Request, res: Express.Response) => {
-    console.log('Responding to a POST request: ', req);
     RobotSlave.readMessage(req.body);
     res.status(200).json({});
 });
