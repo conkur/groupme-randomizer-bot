@@ -1,6 +1,40 @@
 import * as Request from 'request';
+import * as Snoowrap from 'snoowrap';
+
+interface IAttachment {
+    type: string;
+}
+
+interface IImageAttachment extends IAttachment {
+    type: 'image';
+    url: string;
+}
+
+interface IMentionAttachment extends IAttachment {
+    type: 'mentions';
+    loci: any[];
+    user_ids: string[];
+}
 
 export class RobotSlave {
+    private readonly MEME_TRIGGER = 'MEMES PLZ';
+    private readonly MENTION_ALL_TRIGGER = '@ALL';
+    private readonly DEFAULT_MEME_TEXT = 'One spicy meme coming up boss:';
+
+    private readonly GROUP_API_OPTIONS: Request.Options = {
+        url: `https://api.groupme.com/v3/groups/${process.env.GROUP_ID}`,
+        qs: {
+            token: process.env.GROUPME_ACCESS_TOKEN,
+        },
+        json: true,
+    }
+
+    private readonly SNOO: Snoowrap = new Snoowrap({
+        userAgent: 'unknown',
+        clientId: process.env.REDDIT_ID,
+        clientSecret: process.env.REDDIT_SECRET,
+        refreshToken: process.env.REDDIT_REFRESH_TOKEN,
+    });
 
     /**
      * Reads the body of a GroupMe POST request, and sends a message back to the chat
@@ -9,39 +43,43 @@ export class RobotSlave {
      * @static
      * @param groupMeBody The info that GroupMe sent to the bot
      */
-    static readMessage = (groupMeBody: any): void | undefined => {
+    readMessage(groupMeBody: any, userAgent?: string | null): void | undefined {
+        if (userAgent) {
+            this.SNOO.userAgent = userAgent;
+        }
 
-        // We don't want to do anything if the bot itself sent the message.
-        if (groupMeBody.name === process.env.BOT_NAME) {
+        // We don't want to do anything if the bot itself sent the message, or if no text was sent.
+        if (!groupMeBody.text || (groupMeBody.name === process.env.BOT_NAME)) {
             return;
         }
 
+        const upperText: string = groupMeBody.text.toUpperCase();
+
         // TODO: Make this check more strict. If someone's username begins with '@all' then that will cause a problem.
-        if (groupMeBody.text.includes('@all')) {
-            RobotSlave.mentionEveryone(groupMeBody.text);
+        if (process.env.SHOULD_MENTION_ALL && upperText.toUpperCase().includes(this.MENTION_ALL_TRIGGER)) {
+            this.mentionEveryone(groupMeBody.text);
+        }
+
+        if (process.env.SHOULD_SEND_MEMES && upperText.toUpperCase().includes(this.MEME_TRIGGER)) {
+            const args: string[] = upperText.split(this.MEME_TRIGGER);
+            const specifiedSubreddit: string = args[args.length - 1].trim();
+            this.sendRedditImage(specifiedSubreddit === '' ? process.env.DEFAULT_SUBREDDIT : specifiedSubreddit);
         }
     };
 
-    private static mentionEveryone = (text: string): void => {
-        const options: Request.Options = {
-            url: `https://api.groupme.com/v3/groups/${process.env.GROUP_ID}`,
-            qs: {
-                token: process.env.GROUPME_ACCESS_TOKEN,
-            },
-            json: true,
-        };
+    private mentionEveryone(text: string): void {
 
         // Since we need a list of user IDs to mention everyone, we need to make a request to get all the user IDs.
-        const getMemberIdsRequest = Request.get(options, (error, res, _body): void | undefined => {
+        const getMemberIdsRequest = Request.get(this.GROUP_API_OPTIONS, (error, res, _body): void | undefined => {
             if (res.statusCode !== 200) {
                 console.log(`Rejecting bad status code: ${res.statusCode}. Error: ${error}`);
                 return;
             }
 
-            const attachments = [{
-                loci: [] as any[],
+            const attachments: IMentionAttachment[] = [{
+                loci: [],
                 type: "mentions",
-                user_ids: [] as string[],
+                user_ids: [],
             }];
         
             // Create the list of user IDs. Each user in this list will be pinged.
@@ -52,7 +90,7 @@ export class RobotSlave {
             });
 
             // Send the message which will ping everyone in the group.
-            RobotSlave.sendMessageToGroupMe(text, attachments);
+            this.sendMessageToGroupMe(text, attachments);
         });
         getMemberIdsRequest.on('error', (error) => {
             console.log(`Caught error during mentioning everyone: ${error}`);
@@ -62,10 +100,90 @@ export class RobotSlave {
         });
     }
 
-    private static sendMessageToGroupMe = (text: string, attachments?: any[]): void | undefined => {
+    private sendRedditImage(subredditName = 'shittydarksouls'): void {
+        console.log(`Firing request to get random submssion from ${subredditName}`);
+        this.SNOO.getSubreddit(subredditName).getRandomSubmission().then((submissions: Snoowrap.Submission | Snoowrap.Submission[]): void | undefined => {
+            if (!submissions) {
+                this.reportSubmissionNotFound();
+                return;
+            }
+
+            if (Array.isArray(submissions)) { // Handle an array of submissions.
+                this.sendRandomSubmissionFromArray(submissions);
+            } else if (submissions.is_self) { // Handle a single text submission.
+                this.sendSelfTextToGroupMe(submissions);
+            } else { // Handle a single URL submission.
+                this.sendURLSubmission(submissions);
+            }
+        }).catch((error: any) => {
+            console.log(`Error when getting random submission. Error: ${error}`);
+        });
+    }
+
+    private sendRandomSubmissionFromArray(submissions: Snoowrap.Submission[]): void | undefined {
+        console.log(`Array of submissions returned.`);
+        if (submissions.length === 0) {
+            this.reportSubmissionNotFound();
+            return;
+        }
+        const getRandomArrayItem = (arr: any[]) => arr[Math.floor(Math.random() * submissions.length)];
+        const urlSubmissions: Snoowrap.Submission[] = submissions.filter(submission => !submission.is_self);
+        if (urlSubmissions.length === 0) {
+            this.sendSelfTextToGroupMe(getRandomArrayItem(submissions));
+        } else {
+            this.sendURLSubmission(getRandomArrayItem(urlSubmissions), this.DEFAULT_MEME_TEXT);
+        }
+    }
+
+    private sendURLSubmission(submission: Snoowrap.Submission, text = ''): void | undefined {
+        if (submission.post_hint === 'image') {
+            if (process.env.SEND_ONLY_IMAGE || !submission.permalink) {
+                this.sendImageToGroupMe(submission, text);
+            } else {
+                this.sendRedditPostToGroupMe(submission, text);
+            }
+            return;
+        }
+
+        console.log(`Sending url: ${submission.url}`);
+        this.sendMessageToGroupMe(submission.url);
+    }
+
+    private sendImageToGroupMe(submission: Snoowrap.Submission, text = ''): void | undefined {
+        if (!this.wasSubmissionFound(submission)) {
+            this.reportSubmissionNotFound();
+            return;
+        }
+        console.log(`Sending direct image: ${submission.url}`);
+        this.sendMessageToGroupMe(text, [{
+            url: submission.url,
+            type: 'image',
+        }] as IImageAttachment[]);
+    }
+
+    private sendSelfTextToGroupMe(submission: Snoowrap.Submission): void | undefined {
+        if (!this.wasSubmissionFound(submission)) {
+            this.reportSubmissionNotFound();
+            return;
+        }
+        console.log(`Submission was not a URL. Sending text from ${submission.subreddit.display_name}`);
+        this.sendMessageToGroupMe(submission.selftext);
+    }
+
+    private sendRedditPostToGroupMe(submission: Snoowrap.Submission, text: string): void | undefined {
+        if (!this.wasSubmissionFound(submission)) {
+            this.reportSubmissionNotFound();
+            return;
+        }
+        const redditPostURL = `www.reddit.com${submission.permalink}`;
+        console.log(`Sending link to post: ${redditPostURL}`);
+        this.sendMessageToGroupMe(`${text}\n\n${redditPostURL}`);
+    }
+
+    private sendMessageToGroupMe(text?: string, attachments?: IAttachment[]): void | undefined {
         const BOT_ID = process.env.BOT_ID;
         if (!BOT_ID) {
-            console.log('Bot info is unknown :(. Message was not sent.');
+            console.log('Bot info is unknown :(. Nothing sent.');
             return;
         }
 
@@ -90,5 +208,10 @@ export class RobotSlave {
         messageRequest.on('timeout', (error) => {
             console.log(`Timed out during sending message: ${error}`);
         });
+    }
+
+    private wasSubmissionFound = (submission: Snoowrap.Submission): boolean => submission && submission.subreddit ? true: false;
+    private reportSubmissionNotFound = (text = `No random submissions found! Nothing sent`) => {
+        console.log(text);
     }
 }

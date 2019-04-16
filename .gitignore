@@ -1,3 +1,6 @@
 node_modules
 dist
 .env
+
+# TODO: Remove this and add to my global .gitignore
+.vscode
