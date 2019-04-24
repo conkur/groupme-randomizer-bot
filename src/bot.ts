@@ -137,7 +137,7 @@ export class RobotSlave {
 
     private sendURLSubmission(submission: Snoowrap.Submission, text = ''): void | undefined {
         if (submission.post_hint === 'image') {
-            if (process.env.SEND_ONLY_IMAGE || !submission.permalink) {
+            if (process.env.SHOULD_SEND_IMAGE_ONLY || !submission.permalink) {
                 this.sendImageToGroupMe(submission, text);
             } else {
                 this.sendRedditPostToGroupMe(submission, text);
