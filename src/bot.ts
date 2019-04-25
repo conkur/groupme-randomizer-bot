@@ -17,7 +17,7 @@ interface IMentionAttachment extends IAttachment {
 }
 
 export class RobotSlave {
-    private readonly MEME_TRIGGER = 'MEMES PLZ';
+    private readonly MEME_TRIGGERS = ['MEMES PLZ', 'MEMES PLS', 'MEMEME'];
     private readonly MENTION_ALL_TRIGGER = '@ALL';
     private readonly DEFAULT_MEME_TEXT = 'One spicy meme coming up boss:';
 
@@ -58,13 +58,24 @@ export class RobotSlave {
         // TODO: Make this check more strict. If someone's username begins with '@all' then that will cause a problem.
         if (process.env.SHOULD_MENTION_ALL && upperText.toUpperCase().includes(this.MENTION_ALL_TRIGGER)) {
             this.mentionEveryone(groupMeBody.text);
+            return;
         }
 
-        if (process.env.SHOULD_SEND_MEMES && upperText.toUpperCase().includes(this.MEME_TRIGGER)) {
-            const args: string[] = upperText.split(this.MEME_TRIGGER);
-            const specifiedSubreddit: string = args[args.length - 1].trim();
-            this.sendRedditImage(specifiedSubreddit === '' ? process.env.DEFAULT_SUBREDDIT : specifiedSubreddit);
+        // The only other possible command is to send a meme. If we don't want that command enabled, then just do nothing.
+        if (!process.env.SHOULD_SEND_MEMES) {
+            return;
         }
+        
+        // If the text matches anything in the array of meme triggers, then send a random meme from reddit.
+        // Matching input example: 'memes plz shittyrainbow6'
+        const matchedMemeTrigger: string | undefined = this.MEME_TRIGGERS.find(trigger => upperText.includes(trigger));
+        if (!matchedMemeTrigger) {
+            return;
+        }
+
+        const args: string[] = upperText.split(matchedMemeTrigger); // ['memes plz', 'shittyrainbow6']
+        const specifiedSubreddit: string = args[args.length - 1].trim(); // 'shittyrainbow6'
+        this.sendRedditImage(specifiedSubreddit || process.env.DEFAULT_SUBREDDIT);
     };
 
     private mentionEveryone(text: string): void {
@@ -145,8 +156,30 @@ export class RobotSlave {
             return;
         }
 
-        console.log(`Sending url: ${submission.url}`);
-        this.sendMessageToGroupMe(submission.url);
+        const url: string = submission.url;
+        if (url.includes('reddit.com/r/')) {
+            this.handleRedirectToSubreddit(submission, url);
+        } else {
+            console.log(`Sending url: ${url}`);
+            this.sendMessageToGroupMe(url);
+        }
+    }
+
+    /**
+     * If a submission forwards to a subreddit, then grab a meme from that subreddit.
+     * If the submission forwards to the same subreddit as the subreddit where the submission came from, then do nothing
+     * or else we'd hit an infinite loop.
+     * @param submission
+     * @param url - e.g. reddit.com/r/shittyrainbow6
+     */
+    private handleRedirectToSubreddit(submission: Snoowrap.Submission, url: string): void {
+        const forwardedSubredditName: string = url.split('reddit.com/r/')[1];
+        if (forwardedSubredditName === submission.subreddit.display_name) {
+            console.log(`URL redirects to same subreddit. Nothing sent`);
+            return;
+        }
+        console.log(`URL redirects to different subreddit: ${forwardedSubredditName}`);
+        this.sendRedditImage(forwardedSubredditName);
     }
 
     private sendImageToGroupMe(submission: Snoowrap.Submission, text = ''): void | undefined {
