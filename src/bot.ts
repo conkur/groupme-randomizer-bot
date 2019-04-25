@@ -67,15 +67,15 @@ export class RobotSlave {
         }
         
         // If the text matches anything in the array of meme triggers, then send a random meme from reddit.
-        // Matching input example: 'memes plz shittyrainbow6'
+        // Matching input example: 'memes plz shitty rainbow 6'
         const matchedMemeTrigger: string | undefined = this.MEME_TRIGGERS.find(trigger => upperText.includes(trigger));
         if (!matchedMemeTrigger) {
             return;
         }
 
-        const args: string[] = upperText.split(matchedMemeTrigger); // ['memes plz', 'shittyrainbow6']
-        const specifiedSubreddit: string = args[args.length - 1].trim(); // 'shittyrainbow6'
-        this.sendRedditImage(specifiedSubreddit || process.env.DEFAULT_SUBREDDIT);
+        const stringAfterTrigger: string | undefined = upperText.split(matchedMemeTrigger).pop(); // ' shitty rainbow 6'
+        const subredditToGetImageFrom: string | undefined = stringAfterTrigger ? stringAfterTrigger.split(' ').join('') : process.env.DEFAULT_SUBREDDIT; // 'shittyrainbow6'
+        this.sendRedditImage(subredditToGetImageFrom);
     };
 
     private mentionEveryone(text: string): void {
