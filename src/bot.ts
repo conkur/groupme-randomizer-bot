@@ -230,6 +230,12 @@ export class RobotSlave {
             },
             json: true,
         };
+
+        if (process.env.SHOULD_NOT_SEND_TO_GROUPME === 'true') {
+            console.log(`Would've sent to GroupMe: ${JSON.stringify(options, null, 4)}`);
+            return;
+        }
+
         const messageRequest = Request.post(options, (_error, res, _body) => {
             if (res.statusCode !== 202) {
                 console.log(`Rejecting bad status code: ${res.statusCode}`);
