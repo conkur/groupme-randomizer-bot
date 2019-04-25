@@ -183,7 +183,7 @@ export class RobotSlave {
     }
 
     private sendImageToGroupMe(submission: Snoowrap.Submission, text = ''): void | undefined {
-        if (!this.wasSubmissionFound(submission)) {
+        if (this.wasSubmissionNotFound(submission)) {
             this.reportSubmissionNotFound();
             return;
         }
@@ -195,7 +195,7 @@ export class RobotSlave {
     }
 
     private sendSelfTextToGroupMe(submission: Snoowrap.Submission): void | undefined {
-        if (!this.wasSubmissionFound(submission)) {
+        if (this.wasSubmissionNotFound(submission)) {
             this.reportSubmissionNotFound();
             return;
         }
@@ -204,7 +204,7 @@ export class RobotSlave {
     }
 
     private sendRedditPostToGroupMe(submission: Snoowrap.Submission, text: string): void | undefined {
-        if (!this.wasSubmissionFound(submission)) {
+        if (this.wasSubmissionNotFound(submission)) {
             this.reportSubmissionNotFound();
             return;
         }
@@ -243,7 +243,7 @@ export class RobotSlave {
         });
     }
 
-    private wasSubmissionFound = (submission: Snoowrap.Submission): boolean => submission && submission.subreddit ? true: false;
+    private wasSubmissionNotFound = (submission: Snoowrap.Submission): boolean => submission && submission.subreddit ? false : true;
     private reportSubmissionNotFound = (text = `No random submissions found! Nothing sent`) => {
         console.log(text);
     }
