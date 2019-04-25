@@ -20,6 +20,7 @@ export class RobotSlave {
     private readonly MEME_TRIGGERS = ['MEMES PLZ', 'MEMES PLS', 'MEMEME'];
     private readonly MENTION_ALL_TRIGGER = '@ALL';
     private readonly DEFAULT_MEME_TEXT = 'One spicy meme coming up boss:';
+    private readonly DEFAULT_MAX_SELF_TEXT_LENGTH = 80;
 
     private readonly GROUP_API_OPTIONS: Request.Options = {
         url: `https://api.groupme.com/v3/groups/${process.env.GROUP_ID}`,
@@ -142,16 +143,16 @@ export class RobotSlave {
         if (urlSubmissions.length === 0) {
             this.sendSelfTextToGroupMe(getRandomArrayItem(submissions));
         } else {
-            this.sendURLSubmission(getRandomArrayItem(urlSubmissions), this.DEFAULT_MEME_TEXT);
+            this.sendURLSubmission(getRandomArrayItem(urlSubmissions));
         }
     }
 
-    private sendURLSubmission(submission: Snoowrap.Submission, text = ''): void | undefined {
+    private sendURLSubmission(submission: Snoowrap.Submission): void | undefined {
         if (submission.post_hint === 'image') {
             if (process.env.SHOULD_SEND_IMAGE_ONLY || !submission.permalink) {
-                this.sendImageToGroupMe(submission, text);
+                this.sendImageToGroupMe(submission);
             } else {
-                this.sendRedditPostToGroupMe(submission, text);
+                this.sendRedditPostToGroupMe(submission);
             }
             return;
         }
@@ -199,18 +200,27 @@ export class RobotSlave {
             this.reportSubmissionNotFound();
             return;
         }
-        console.log(`Submission was not a URL. Sending text from ${submission.subreddit.display_name}`);
-        this.sendMessageToGroupMe(submission.selftext);
+
+        // If the self text is really long, just send the reddit post. Otherwise, send just the text. This prevents really long posts from spamming
+        // the group.
+        const maxSelfTextLength: number = process.env.MAX_SELF_TEXT_LENGTH ? parseInt(process.env.MAX_SELF_TEXT_LENGTH) : this.DEFAULT_MAX_SELF_TEXT_LENGTH;
+        if (submission.selftext.length > maxSelfTextLength) {
+            console.log(`Submission was not a URL. Text too long, sending post instead from ${submission.subreddit.display_name}`);
+            this.sendRedditPostToGroupMe(submission);
+        } else {
+            console.log(`Submission was not a URL. Sending text from ${submission.subreddit.display_name}`);
+            this.sendMessageToGroupMe(submission.selftext);
+        }
     }
 
-    private sendRedditPostToGroupMe(submission: Snoowrap.Submission, text: string): void | undefined {
+    private sendRedditPostToGroupMe(submission: Snoowrap.Submission): void | undefined {
         if (this.wasSubmissionNotFound(submission)) {
             this.reportSubmissionNotFound();
             return;
         }
         const redditPostURL = `www.reddit.com${submission.permalink}`;
         console.log(`Sending link to post: ${redditPostURL}`);
-        this.sendMessageToGroupMe(`${text}\n\n${redditPostURL}`);
+        this.sendMessageToGroupMe(`${this.DEFAULT_MEME_TEXT}\n\n${redditPostURL}`);
     }
 
     private sendMessageToGroupMe(text?: string, attachments?: IAttachment[]): void | undefined {
