@@ -17,9 +17,10 @@ interface IMentionAttachment extends IAttachment {
 }
 
 export class RobotSlave {
-    private readonly MEME_TRIGGER = 'MEMES PLZ';
+    private readonly MEME_TRIGGERS = ['MEMES PLZ', 'MEMES PLS', 'MEMEME'];
     private readonly MENTION_ALL_TRIGGER = '@ALL';
     private readonly DEFAULT_MEME_TEXT = 'One spicy meme coming up boss:';
+    private readonly DEFAULT_MAX_SELF_TEXT_LENGTH = 80;
 
     private readonly GROUP_API_OPTIONS: Request.Options = {
         url: `https://api.groupme.com/v3/groups/${process.env.GROUP_ID}`,
@@ -58,13 +59,24 @@ export class RobotSlave {
         // TODO: Make this check more strict. If someone's username begins with '@all' then that will cause a problem.
         if (process.env.SHOULD_MENTION_ALL && upperText.toUpperCase().includes(this.MENTION_ALL_TRIGGER)) {
             this.mentionEveryone(groupMeBody.text);
+            return;
         }
 
-        if (process.env.SHOULD_SEND_MEMES && upperText.toUpperCase().includes(this.MEME_TRIGGER)) {
-            const args: string[] = upperText.split(this.MEME_TRIGGER);
-            const specifiedSubreddit: string = args[args.length - 1].trim();
-            this.sendRedditImage(specifiedSubreddit === '' ? process.env.DEFAULT_SUBREDDIT : specifiedSubreddit);
+        // The only other possible command is to send a meme. If we don't want that command enabled, then just do nothing.
+        if (!process.env.SHOULD_SEND_MEMES) {
+            return;
         }
+        
+        // If the text matches anything in the array of meme triggers, then send a random meme from reddit.
+        // Matching input example: 'memes plz shitty rainbow 6'
+        const matchedMemeTrigger: string | undefined = this.MEME_TRIGGERS.find(trigger => upperText.includes(trigger));
+        if (!matchedMemeTrigger) {
+            return;
+        }
+
+        const stringAfterTrigger: string | undefined = upperText.split(matchedMemeTrigger).pop(); // ' shitty rainbow 6'
+        const subredditToGetImageFrom: string | undefined = stringAfterTrigger ? stringAfterTrigger.split(' ').join('') : process.env.DEFAULT_SUBREDDIT; // 'shittyrainbow6'
+        this.sendRedditImage(subredditToGetImageFrom);
     };
 
     private mentionEveryone(text: string): void {
@@ -131,26 +143,48 @@ export class RobotSlave {
         if (urlSubmissions.length === 0) {
             this.sendSelfTextToGroupMe(getRandomArrayItem(submissions));
         } else {
-            this.sendURLSubmission(getRandomArrayItem(urlSubmissions), this.DEFAULT_MEME_TEXT);
+            this.sendURLSubmission(getRandomArrayItem(urlSubmissions));
         }
     }
 
-    private sendURLSubmission(submission: Snoowrap.Submission, text = ''): void | undefined {
+    private sendURLSubmission(submission: Snoowrap.Submission): void | undefined {
         if (submission.post_hint === 'image') {
-            if (process.env.SEND_ONLY_IMAGE || !submission.permalink) {
-                this.sendImageToGroupMe(submission, text);
+            if (process.env.SHOULD_SEND_IMAGE_ONLY || !submission.permalink) {
+                this.sendImageToGroupMe(submission);
             } else {
-                this.sendRedditPostToGroupMe(submission, text);
+                this.sendRedditPostToGroupMe(submission);
             }
             return;
         }
 
-        console.log(`Sending url: ${submission.url}`);
-        this.sendMessageToGroupMe(submission.url);
+        const url: string = submission.url;
+        if (url.includes('reddit.com/r/')) {
+            this.handleRedirectToSubreddit(submission, url);
+        } else {
+            console.log(`Sending url: ${url}`);
+            this.sendMessageToGroupMe(url);
+        }
+    }
+
+    /**
+     * If a submission forwards to a subreddit, then grab a meme from that subreddit.
+     * If the submission forwards to the same subreddit as the subreddit where the submission came from, then do nothing
+     * or else we'd hit an infinite loop.
+     * @param submission
+     * @param url - e.g. reddit.com/r/shittyrainbow6
+     */
+    private handleRedirectToSubreddit(submission: Snoowrap.Submission, url: string): void {
+        const forwardedSubredditName: string = url.split('reddit.com/r/')[1];
+        if (forwardedSubredditName === submission.subreddit.display_name) {
+            console.log(`URL redirects to same subreddit. Nothing sent`);
+            return;
+        }
+        console.log(`URL redirects to different subreddit: ${forwardedSubredditName}`);
+        this.sendRedditImage(forwardedSubredditName);
     }
 
     private sendImageToGroupMe(submission: Snoowrap.Submission, text = ''): void | undefined {
-        if (!this.wasSubmissionFound(submission)) {
+        if (this.wasSubmissionNotFound(submission)) {
             this.reportSubmissionNotFound();
             return;
         }
@@ -162,22 +196,31 @@ export class RobotSlave {
     }
 
     private sendSelfTextToGroupMe(submission: Snoowrap.Submission): void | undefined {
-        if (!this.wasSubmissionFound(submission)) {
+        if (this.wasSubmissionNotFound(submission)) {
             this.reportSubmissionNotFound();
             return;
         }
-        console.log(`Submission was not a URL. Sending text from ${submission.subreddit.display_name}`);
-        this.sendMessageToGroupMe(submission.selftext);
+
+        // If the self text is really long, just send the reddit post. Otherwise, send just the text. This prevents really long posts from spamming
+        // the group.
+        const maxSelfTextLength: number = process.env.MAX_SELF_TEXT_LENGTH ? parseInt(process.env.MAX_SELF_TEXT_LENGTH) : this.DEFAULT_MAX_SELF_TEXT_LENGTH;
+        if (submission.selftext.length > maxSelfTextLength) {
+            console.log(`Submission was not a URL. Text too long, sending post instead from ${submission.subreddit.display_name}`);
+            this.sendRedditPostToGroupMe(submission);
+        } else {
+            console.log(`Submission was not a URL. Sending text from ${submission.subreddit.display_name}`);
+            this.sendMessageToGroupMe(submission.selftext);
+        }
     }
 
-    private sendRedditPostToGroupMe(submission: Snoowrap.Submission, text: string): void | undefined {
-        if (!this.wasSubmissionFound(submission)) {
+    private sendRedditPostToGroupMe(submission: Snoowrap.Submission): void | undefined {
+        if (this.wasSubmissionNotFound(submission)) {
             this.reportSubmissionNotFound();
             return;
         }
         const redditPostURL = `www.reddit.com${submission.permalink}`;
         console.log(`Sending link to post: ${redditPostURL}`);
-        this.sendMessageToGroupMe(`${text}\n\n${redditPostURL}`);
+        this.sendMessageToGroupMe(`${this.DEFAULT_MEME_TEXT}\n\n${redditPostURL}`);
     }
 
     private sendMessageToGroupMe(text?: string, attachments?: IAttachment[]): void | undefined {
@@ -197,6 +240,12 @@ export class RobotSlave {
             },
             json: true,
         };
+
+        if (process.env.SHOULD_NOT_SEND_TO_GROUPME === 'true') {
+            console.log(`Would've sent to GroupMe: ${JSON.stringify(options, null, 4)}`);
+            return;
+        }
+
         const messageRequest = Request.post(options, (_error, res, _body) => {
             if (res.statusCode !== 202) {
                 console.log(`Rejecting bad status code: ${res.statusCode}`);
@@ -210,7 +259,7 @@ export class RobotSlave {
         });
     }
 
-    private wasSubmissionFound = (submission: Snoowrap.Submission): boolean => submission && submission.subreddit ? true: false;
+    private wasSubmissionNotFound = (submission: Snoowrap.Submission): boolean => submission && submission.subreddit ? false : true;
     private reportSubmissionNotFound = (text = `No random submissions found! Nothing sent`) => {
         console.log(text);
     }
