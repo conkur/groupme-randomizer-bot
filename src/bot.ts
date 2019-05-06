@@ -82,7 +82,7 @@ export class RobotSlave {
     private mentionEveryone(text: string): void {
 
         // Since we need a list of user IDs to mention everyone, we need to make a request to get all the user IDs.
-        const getMemberIdsRequest = Request.get(this.GROUP_API_OPTIONS, (error, res, _body): void | undefined => {
+        Request.get(this.GROUP_API_OPTIONS, (error, res, _body): void | undefined => {
             if (res.statusCode !== 200) {
                 console.log(`Rejecting bad status code: ${res.statusCode}. Error: ${error}`);
                 return;
@@ -104,53 +104,57 @@ export class RobotSlave {
             // Send the message which will ping everyone in the group.
             this.sendMessageToGroupMe(text, attachments);
         });
-        getMemberIdsRequest.on('error', (error) => {
-            console.log(`Caught error during mentioning everyone: ${error}`);
-        });
-        getMemberIdsRequest.on('timeout', (error) => {
-            console.log(`Timed out during mentioning everyone: ${error}`);
-        });
     }
 
     private sendRedditImage(subredditName = 'shittydarksouls'): void {
-        console.log(`Firing request to get random submssion from ${subredditName}`);
         this.SNOO.getSubreddit(subredditName).getRandomSubmission().then((submissions: Snoowrap.Submission | Snoowrap.Submission[]): void | undefined => {
-            if (!submissions) {
-                this.reportSubmissionNotFound();
+            if (Array.isArray(submissions)) { // Handle an array of submissions.
+                if (submissions.length === 0) {
+                    throw new Error(`No random submissions found`);
+                }
+                this.sendRandomSubmissionFromArray(submissions);
                 return;
             }
 
-            if (Array.isArray(submissions)) { // Handle an array of submissions.
-                this.sendRandomSubmissionFromArray(submissions);
-            } else if (submissions.is_self) { // Handle a single text submission.
+            if (!submissions || !submissions.subreddit) {
+                throw new Error(`No random submissions found`);
+            }
+
+            if (submissions.is_self) { // Handle a single text submission.
                 this.sendSelfTextToGroupMe(submissions);
             } else { // Handle a single URL submission.
                 this.sendURLSubmission(submissions);
             }
         }).catch((error: any) => {
             console.log(`Error when getting random submission. Error: ${error}`);
+            this.sendMessageToGroupMe(`Try again later, for I am too full of shit right now.`);
         });
     }
 
-    private sendRandomSubmissionFromArray(submissions: Snoowrap.Submission[]): void | undefined {
-        console.log(`Array of submissions returned.`);
-        if (submissions.length === 0) {
-            this.reportSubmissionNotFound();
-            return;
-        }
-        const getRandomArrayItem = (arr: any[]) => arr[Math.floor(Math.random() * submissions.length)];
+    /**
+     * Grabs a random submission from an array of reddit submissions and then sends it to GroupMe.
+     * We prioritize url submissions since we'd rather send an image than a self text. But if no random url submission could be found,
+     * then we send a self text.
+     * @param submissions 
+     */
+    private sendRandomSubmissionFromArray(submissions: Snoowrap.Submission[]): void {
+        const getRandomArrayItem = (arr: Snoowrap.Submission[]) => arr[Math.floor(Math.random() * submissions.length)];
         const urlSubmissions: Snoowrap.Submission[] = submissions.filter(submission => !submission.is_self);
-        if (urlSubmissions.length === 0) {
-            this.sendSelfTextToGroupMe(getRandomArrayItem(submissions));
+        let randomSubmission: Snoowrap.Submission = getRandomArrayItem(urlSubmissions.length === 0 ? submissions : urlSubmissions);
+        if (!randomSubmission || !randomSubmission.subreddit) {
+            throw new Error('Submission not found');
+        }
+        if (randomSubmission.is_self) {
+            this.sendSelfTextToGroupMe(randomSubmission);
         } else {
-            this.sendURLSubmission(getRandomArrayItem(urlSubmissions));
+            this.sendURLSubmission(randomSubmission);
         }
     }
 
     private sendURLSubmission(submission: Snoowrap.Submission): void | undefined {
         if (submission.post_hint === 'image') {
             if (process.env.SHOULD_SEND_IMAGE_ONLY || !submission.permalink) {
-                this.sendImageToGroupMe(submission);
+                this.sendMessageToGroupMe('', [{url: submission.url, type: 'image'}] as IImageAttachment[]);
             } else {
                 this.sendRedditPostToGroupMe(submission);
             }
@@ -183,26 +187,11 @@ export class RobotSlave {
         this.sendRedditImage(forwardedSubredditName);
     }
 
-    private sendImageToGroupMe(submission: Snoowrap.Submission, text = ''): void | undefined {
-        if (this.wasSubmissionNotFound(submission)) {
-            this.reportSubmissionNotFound();
-            return;
-        }
-        console.log(`Sending direct image: ${submission.url}`);
-        this.sendMessageToGroupMe(text, [{
-            url: submission.url,
-            type: 'image',
-        }] as IImageAttachment[]);
-    }
-
+    /**
+     * If the self text is really long, just send the reddit post. Otherwise, send just the text. This prevents really long posts from spamming the group.
+     * @param submission
+     */
     private sendSelfTextToGroupMe(submission: Snoowrap.Submission): void | undefined {
-        if (this.wasSubmissionNotFound(submission)) {
-            this.reportSubmissionNotFound();
-            return;
-        }
-
-        // If the self text is really long, just send the reddit post. Otherwise, send just the text. This prevents really long posts from spamming
-        // the group.
         const maxSelfTextLength: number = process.env.MAX_SELF_TEXT_LENGTH ? parseInt(process.env.MAX_SELF_TEXT_LENGTH) : this.DEFAULT_MAX_SELF_TEXT_LENGTH;
         if (submission.selftext.length > maxSelfTextLength) {
             console.log(`Submission was not a URL. Text too long, sending post instead from ${submission.subreddit.display_name}`);
@@ -214,10 +203,6 @@ export class RobotSlave {
     }
 
     private sendRedditPostToGroupMe(submission: Snoowrap.Submission): void | undefined {
-        if (this.wasSubmissionNotFound(submission)) {
-            this.reportSubmissionNotFound();
-            return;
-        }
         const redditPostURL = `www.reddit.com${submission.permalink}`;
         console.log(`Sending link to post: ${redditPostURL}`);
         this.sendMessageToGroupMe(`${this.DEFAULT_MEME_TEXT}\n\n${redditPostURL}`);
@@ -246,21 +231,10 @@ export class RobotSlave {
             return;
         }
 
-        const messageRequest = Request.post(options, (_error, res, _body) => {
+        Request.post(options, (_error, res, _body) => {
             if (res.statusCode !== 202) {
-                console.log(`Rejecting bad status code: ${res.statusCode}`);
+                console.log(`Rejecting bad status code when sending GroupMe message: ${res.statusCode}`);
             }
         });
-        messageRequest.on('error', (error) => {
-            console.log(`Caught error when sending message: ${error}`);
-        });
-        messageRequest.on('timeout', (error) => {
-            console.log(`Timed out during sending message: ${error}`);
-        });
-    }
-
-    private wasSubmissionNotFound = (submission: Snoowrap.Submission): boolean => submission && submission.subreddit ? false : true;
-    private reportSubmissionNotFound = (text = `No random submissions found! Nothing sent`) => {
-        console.log(text);
     }
 }
