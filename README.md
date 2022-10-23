@@ -1,24 +1,19 @@
-# groupme-robot-slave
+# groupme-randomizer-bot
 
 <i>README is still a WIP.</i>
 
 #### GroupMe bot, built with Nodejs.
 
-## API's used
-- [GroupMe](https://dev.groupme.com/)
-- [Reddit authorized app](www.reddit.com/prefs/apps/)
-- [Snoowrap (wrapper for Reddit API)](https://github.com/not-an-aardvark/snoowrap)
-
 ## Features
 
 <i>All commands are case-insensitive.</i>
 
-1. Mention everybody in the chat.
-    - Write `@all` to the group, and the bot will send a message which pings everybody in the chat.
-2. Send a random post from a specified subreddit.
+1. Send a random post from a specified subreddit.
     - <i>Example: `memes plz shittydarksouls`</i>
     - Write `memes plz <subreddit_name>` and the bot will send a random image/url/self post.
     - If `<subreddit_name>` is not specified, a random post from the specified default subreddit (determined by `process.env.DEFAULT_SUBREDDIT`) is sent.
+2. Mention everybody in the chat. **_(Currently broken!)_**
+    - Write `@all` to the group, and the bot will send a message which pings everybody in the chat.
     
 ## How to use in your GroupMe group
 1. [Create your own GroupMe bot](https://dev.groupme.com/).
@@ -26,7 +21,12 @@
 3. Edit your GroupMe bot's callback URL to point to the URL where your fork is hosted (step 2).
 4. If using the Reddit features, you must have an [authorized app](www.reddit.com/prefs/apps/) created .
 4. Make sure your process.env variables point to your bot ID, group ID, etc. (see 'Configurations' below for more detail)
-5. Enjoy this really shitty / probably not functional bot.
+5. Enjoy this not perfect / possibly not functional bot.
+
+## API's used
+- [GroupMe](https://dev.groupme.com/)
+- [Reddit authorized app](www.reddit.com/prefs/apps/)
+- [Snoowrap (wrapper for Reddit API)](https://github.com/not-an-aardvark/snoowrap)
 
 ## Configurations
 
