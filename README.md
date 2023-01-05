@@ -9,11 +9,11 @@
 <i>All commands are case-insensitive.</i>
 
 1. Send a random post from a specified subreddit.
-    - <i>Example: `memes plz shittydarksouls`</i>
+    - <i>Example: `memes plz getdownmrpresident`</i>
     - Write `memes plz <subreddit_name>` and the bot will send a random image/url/self post.
     - If `<subreddit_name>` is not specified, a random post from the specified default subreddit (determined by `process.env.DEFAULT_SUBREDDIT`) is sent.
-2. Mention everybody in the chat. **_(Currently broken!)_**
-    - Write `@all` to the group, and the bot will send a message which pings everybody in the chat.
+2. ~Mention everybody in the chat.~ **_(Currently broken!)_**
+    - ~Write `@all` to the group, and the bot will send a message which pings everybody in the chat.~
     
 ## How to use in your GroupMe group
 1. [Create your own GroupMe bot](https://dev.groupme.com/).
