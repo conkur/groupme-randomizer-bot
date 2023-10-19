@@ -8,7 +8,7 @@
 
 <i>All commands are case-insensitive.</i>
 
-1. Send a random post from a specified subreddit.
+1. Send a random post from a specified subreddit. (IMPORTANT: This is probably broken due to Reddit's recent changes to their API and their authentication process)
     - <i>Example: `memes plz getdownmrpresident`</i>
     - Write `memes plz <subreddit_name>` and the bot will send a random image/url/self post.
     - If `<subreddit_name>` is not specified, a random post from the specified default subreddit (determined by `process.env.DEFAULT_SUBREDDIT`) is sent.
