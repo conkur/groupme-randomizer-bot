@@ -16,7 +16,7 @@ interface IMentionAttachment extends IAttachment {
     user_ids: string[];
 }
 
-export class RobotSlave {
+export class Robot {
     private readonly MEME_TRIGGERS = ['MEMES PLZ', 'MEMES PLS', 'MEMEME'];
     private readonly MENTION_ALL_TRIGGER = '@ALL';
     private readonly DEFAULT_MEME_TEXT = 'One spicy meme coming up boss:';
@@ -68,14 +68,14 @@ export class RobotSlave {
         }
         
         // If the text matches anything in the array of meme triggers, then send a random meme from reddit.
-        // Matching input example: 'memes plz shitty rainbow 6'
+        // Matching input example: 'memes plz an example'
         const matchedMemeTrigger: string | undefined = this.MEME_TRIGGERS.find(trigger => upperText.includes(trigger));
         if (!matchedMemeTrigger) {
             return;
         }
 
-        const stringAfterTrigger: string | undefined = upperText.split(matchedMemeTrigger).pop(); // ' shitty rainbow 6'
-        const subredditToGetImageFrom: string | undefined = stringAfterTrigger ? stringAfterTrigger.split(' ').join('') : process.env.DEFAULT_SUBREDDIT; // 'shittyrainbow6'
+        const stringAfterTrigger: string | undefined = upperText.split(matchedMemeTrigger).pop(); // ' an example'
+        const subredditToGetImageFrom: string | undefined = stringAfterTrigger?.split(' ').join('') || process.env.DEFAULT_SUBREDDIT; // 'anexample'
         this.sendRedditImage(subredditToGetImageFrom);
     };
 
@@ -112,7 +112,7 @@ export class RobotSlave {
         });
     }
 
-    private sendRedditImage(subredditName = 'shittydarksouls'): void {
+    private sendRedditImage(subredditName = 'me_irl'): void {
         console.log(`Firing request to get random submssion from ${subredditName}`);
         this.SNOO.getSubreddit(subredditName).getRandomSubmission().then((submissions: Snoowrap.Submission | Snoowrap.Submission[]): void | undefined => {
             if (!submissions) {
@@ -171,7 +171,7 @@ export class RobotSlave {
      * If the submission forwards to the same subreddit as the subreddit where the submission came from, then do nothing
      * or else we'd hit an infinite loop.
      * @param submission
-     * @param url - e.g. reddit.com/r/shittyrainbow6
+     * @param url - e.g. reddit.com/r/me_irl
      */
     private handleRedirectToSubreddit(submission: Snoowrap.Submission, url: string): void {
         const forwardedSubredditName: string = url.split('reddit.com/r/')[1];
